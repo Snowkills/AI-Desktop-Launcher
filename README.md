@@ -20,7 +20,7 @@ It runs as a native application using Google Chrome in `--app` mode, which means
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/YourUsername/YourRepoName.git
+   git clone https://github.com/Snowkills/AI-Desktop-Launcher.git
    cd YourRepoName
    ```
 
