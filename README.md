@@ -21,7 +21,7 @@ It runs as a native application using Google Chrome in `--app` mode, which means
 
    ```bash
    git clone https://github.com/YourUsername/YourRepoName.git
-   cd YourRepoName
+   cd AI-Desktop-Launcher
    ```
 
 2. **Create a virtual environment and install dependencies:**
