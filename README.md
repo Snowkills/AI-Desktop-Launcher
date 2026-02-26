@@ -20,8 +20,8 @@ It runs as a native application using Google Chrome in `--app` mode, which means
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/Snowkills/AI-Desktop-Launcher.git
-   cd AI-Desktop-Launcher
+   git clone https://github.com/YourUsername/YourRepoName.git
+   cd YourRepoName
    ```
 
 2. **Create a virtual environment and install dependencies:**
@@ -40,6 +40,22 @@ It runs as a native application using Google Chrome in `--app` mode, which means
    # Or you can run it directly with python:
    python3 AIoverlay.py
    ```
+
+### 🪟 Windows Setup
+
+1. **Clone the repository:**
+   Open Command Prompt (`cmd`) or PowerShell and type:
+
+   ```cmd
+   git clone https://github.com/Snowkills/AI-Desktop-Launcher.git
+   cd AI-Desktop-Launcher
+   ```
+
+2. **Run the application:**
+   Simply double-click on `run_AIoverlay.bat` from your File Explorer.
+   The first time you run it, it will automatically create the virtual environment and install dependencies (`PyQt6`). It will then launch the application.
+
+   *(Alternatively, you can manually run `python -m venv venv`, activate it with `venv\Scripts\activate`, `pip install -r requirements.txt`, and run `python AIoverlay.py`)*
 
 ## Adding to Application Menu (Linux)
 

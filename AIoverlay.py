@@ -53,6 +53,17 @@ PIN_ON  = "#f9c74f"
 
 def find_chrome():
     """Find Chrome executable."""
+    if sys.platform == "win32":
+        paths = [
+            os.path.join(os.environ.get("PROGRAMFILES", "C:\\Program Files"), "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"), "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(os.environ.get("LOCALAPPDATA", "C:\\Users\\Default\\AppData\\Local"), "Google", "Chrome", "Application", "chrome.exe")
+        ]
+        for p in paths:
+            if os.path.exists(p):
+                return p
+        return None
+
     for name in ["google-chrome-stable", "google-chrome", "chromium-browser", "chromium"]:
         try:
             r = subprocess.run(["which", name], capture_output=True, text=True, timeout=3)
@@ -241,11 +252,17 @@ class AILauncherBar(QWidget):
             f"--class=ai-desktop-{name.lower()}",
         ]
 
+        kwargs = {}
+        if sys.platform != "win32":
+            kwargs["preexec_fn"] = os.setsid
+        else:
+            kwargs["creationflags"] = 0x00000008  # DETACHED_PROCESS
+
         subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            preexec_fn=os.setsid
+            **kwargs
         )
         print(f"[AI Desktop] Opened {name} — {url}")
 
