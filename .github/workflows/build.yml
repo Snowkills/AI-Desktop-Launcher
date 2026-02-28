@@ -11,127 +11,6 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────
-  #  BUILD LINUX AppImage
-  # ─────────────────────────────────────────────
-  build-linux:
-    name: Build Linux AppImage
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y libfuse2
-
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install pyinstaller PyQt6
-
-      - name: Build with PyInstaller
-        run: |
-          pyinstaller --clean AIoverlay.spec
-
-      - name: Download appimagetool
-        run: |
-          curl -sSL -o appimagetool-x86_64.AppImage \
-            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-
-      - name: Create AppDir structure
-        run: |
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
-
-          cp dist/AIDesktopLauncher AppDir/usr/bin/AIDesktopLauncher
-          chmod +x AppDir/usr/bin/AIDesktopLauncher
-
-          # AppRun entry point
-          cat > AppDir/AppRun << 'APPRUN'
-          #!/bin/bash
-          HERE="$(dirname "$(readlink -f "$0")")"
-          exec "$HERE/usr/bin/AIDesktopLauncher" "$@"
-          APPRUN
-          chmod +x AppDir/AppRun
-
-          # Desktop file
-          cat > AppDir/AIDesktopLauncher.desktop << 'DESKTOP'
-          [Desktop Entry]
-          Name=AI Desktop Launcher
-          Comment=Floating launcher for top AI models
-          Exec=AIDesktopLauncher
-          Icon=AIDesktopLauncher
-          Type=Application
-          Terminal=false
-          Categories=Utility;Network;
-          StartupWMClass=AIDesktopLauncher
-          DESKTOP
-          cp AppDir/AIDesktopLauncher.desktop AppDir/usr/share/applications/
-
-          # Icon: minimal valid 256x256 PNG (blue-on-dark, no Qt needed)
-          python3 - << 'PYEOF'
-          import struct, zlib, base64
-
-          def make_png(width, height):
-              """Create a minimal solid-color PNG without any external lib."""
-              def chunk(tag, data):
-                  c = zlib.crc32(tag + data) & 0xffffffff
-                  return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', c)
-
-              # IHDR
-              ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
-              ihdr = chunk(b'IHDR', ihdr_data)
-
-              # IDAT — dark background (#1a1a1a) with "AI" text approximated as solid color
-              raw_rows = b''
-              for y in range(height):
-                  row = b'\x00'  # filter type None
-                  for x in range(width):
-                      # Draw a simple colored square: dark bg with blue center
-                      cx, cy = width // 2, height // 2
-                      dist = ((x - cx)**2 + (y - cy)**2) ** 0.5
-                      if dist < 80:
-                          row += bytes([138, 180, 248])  # #8ab4f8 blue
-                      else:
-                          row += bytes([26, 26, 26])     # #1a1a1a dark
-                  raw_rows += row
-
-              compressed = zlib.compress(raw_rows, 9)
-              idat = chunk(b'IDAT', compressed)
-              iend = chunk(b'IEND', b'')
-
-              sig = b'\x89PNG\r\n\x1a\n'
-              return sig + ihdr + idat + iend
-
-          png_data = make_png(256, 256)
-          with open('AppDir/AIDesktopLauncher.png', 'wb') as f:
-              f.write(png_data)
-          with open('AppDir/usr/share/icons/hicolor/256x256/apps/AIDesktopLauncher.png', 'wb') as f:
-              f.write(png_data)
-          print(f"Icon created: {len(png_data)} bytes")
-          PYEOF
-
-      - name: Package AppImage
-        run: |
-          ARCH=x86_64 ./appimagetool-x86_64.AppImage --no-appstream AppDir \
-            AIDesktopLauncher-${{ github.ref_name }}-x86_64.AppImage
-
-      - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: AppImage-linux
-          path: AIDesktopLauncher-*.AppImage
-
-  # ─────────────────────────────────────────────
   #  BUILD WINDOWS .exe
   # ─────────────────────────────────────────────
   build-windows:
@@ -171,7 +50,7 @@ jobs:
   # ─────────────────────────────────────────────
   release:
     name: Create GitHub Release
-    needs: [build-linux, build-windows]
+    needs: [build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -193,16 +72,9 @@ jobs:
             ### Downloads
             | Platform | File |
             |----------|------|
-            | 🐧 Linux (x86_64) | `AIDesktopLauncher-${{ github.ref_name }}-x86_64.AppImage` |
             | 🪟 Windows (x64)  | `AIDesktopLauncher-${{ github.ref_name }}-windows.exe` |
 
-            ### Linux usage
-            ```bash
-            chmod +x AIDesktopLauncher-*.AppImage
-            ./AIDesktopLauncher-*.AppImage
-            ```
           files: |
-            AIDesktopLauncher-*.AppImage
             AIDesktopLauncher-*.exe
           draft: false
           prerelease: false
