@@ -26,13 +26,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y xvfb libglib2.0-0 libgl1-mesa-glx libxcb-icccm4 \
-            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
-            libxcb-xinerama0 libxcb-xfixes0 libxkbcommon-x11-0
-
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
@@ -57,18 +50,16 @@ jobs:
           cp dist/AIDesktopLauncher AppDir/usr/bin/AIDesktopLauncher
           chmod +x AppDir/usr/bin/AIDesktopLauncher
 
-      - name: Create AppRun
-        run: |
-          cat > AppDir/AppRun << 'EOF'
+          # AppRun entry point
+          cat > AppDir/AppRun << 'APPRUN'
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "$0")")"
           exec "$HERE/usr/bin/AIDesktopLauncher" "$@"
-          EOF
+          APPRUN
           chmod +x AppDir/AppRun
 
-      - name: Create desktop file
-        run: |
-          cat > AppDir/AIDesktopLauncher.desktop << 'EOF'
+          # Desktop file
+          cat > AppDir/AIDesktopLauncher.desktop << 'DESKTOP'
           [Desktop Entry]
           Name=AI Desktop Launcher
           Comment=Floating launcher for top AI models
@@ -78,30 +69,50 @@ jobs:
           Terminal=false
           Categories=Utility;Network;
           StartupWMClass=AIDesktopLauncher
-          EOF
+          DESKTOP
           cp AppDir/AIDesktopLauncher.desktop AppDir/usr/share/applications/
 
-      - name: Generate icon (with virtual display)
-        run: |
-          Xvfb :99 -screen 0 1024x768x24 &
-          sleep 2
-          DISPLAY=:99 python3 - << 'PYEOF'
-          from PyQt6.QtWidgets import QApplication
-          from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont
-          from PyQt6.QtCore import Qt
-          import sys
-          app = QApplication(sys.argv)
-          pm = QPixmap(256, 256)
-          pm.fill(QColor('#1a1a1a'))
-          p = QPainter(pm)
-          p.setPen(QColor('#8ab4f8'))
-          f = QFont('Arial', 100, QFont.Weight.Bold)
-          p.setFont(f)
-          p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, 'AI')
-          p.end()
-          pm.save('AppDir/AIDesktopLauncher.png')
-          pm.save('AppDir/usr/share/icons/hicolor/256x256/apps/AIDesktopLauncher.png')
-          print("Icon created OK")
+          # Icon: minimal valid 256x256 PNG (blue-on-dark, no Qt needed)
+          python3 - << 'PYEOF'
+          import struct, zlib, base64
+
+          def make_png(width, height):
+              """Create a minimal solid-color PNG without any external lib."""
+              def chunk(tag, data):
+                  c = zlib.crc32(tag + data) & 0xffffffff
+                  return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', c)
+
+              # IHDR
+              ihdr_data = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+              ihdr = chunk(b'IHDR', ihdr_data)
+
+              # IDAT — dark background (#1a1a1a) with "AI" text approximated as solid color
+              raw_rows = b''
+              for y in range(height):
+                  row = b'\x00'  # filter type None
+                  for x in range(width):
+                      # Draw a simple colored square: dark bg with blue center
+                      cx, cy = width // 2, height // 2
+                      dist = ((x - cx)**2 + (y - cy)**2) ** 0.5
+                      if dist < 80:
+                          row += bytes([138, 180, 248])  # #8ab4f8 blue
+                      else:
+                          row += bytes([26, 26, 26])     # #1a1a1a dark
+                  raw_rows += row
+
+              compressed = zlib.compress(raw_rows, 9)
+              idat = chunk(b'IDAT', compressed)
+              iend = chunk(b'IEND', b'')
+
+              sig = b'\x89PNG\r\n\x1a\n'
+              return sig + ihdr + idat + iend
+
+          png_data = make_png(256, 256)
+          with open('AppDir/AIDesktopLauncher.png', 'wb') as f:
+              f.write(png_data)
+          with open('AppDir/usr/share/icons/hicolor/256x256/apps/AIDesktopLauncher.png', 'wb') as f:
+              f.write(png_data)
+          print(f"Icon created: {len(png_data)} bytes")
           PYEOF
 
       - name: Package AppImage
@@ -165,7 +176,7 @@ jobs:
         with:
           merge-multiple: true
 
-      - name: Create Release with assets
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: "AI Desktop Launcher ${{ github.ref_name }}"
