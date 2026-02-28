@@ -3,11 +3,11 @@ name: Build Releases
 on:
   push:
     tags:
-      - 'v*'          # triggers on tags like v1.0.0, v1.2.3 …
-  workflow_dispatch:  # allows manual trigger from GitHub UI
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
-  contents: write   # needed to create GitHub Releases
+  contents: write
 
 jobs:
   # ─────────────────────────────────────────────
@@ -26,7 +26,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb libglib2.0-0 libgl1-mesa-glx libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-xinerama0 libxcb-xfixes0 libxkbcommon-x11-0
+
+      - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install pyinstaller PyQt6
@@ -50,6 +57,8 @@ jobs:
           cp dist/AIDesktopLauncher AppDir/usr/bin/AIDesktopLauncher
           chmod +x AppDir/usr/bin/AIDesktopLauncher
 
+      - name: Create AppRun
+        run: |
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -57,6 +66,8 @@ jobs:
           EOF
           chmod +x AppDir/AppRun
 
+      - name: Create desktop file
+        run: |
           cat > AppDir/AIDesktopLauncher.desktop << 'EOF'
           [Desktop Entry]
           Name=AI Desktop Launcher
@@ -70,13 +81,15 @@ jobs:
           EOF
           cp AppDir/AIDesktopLauncher.desktop AppDir/usr/share/applications/
 
-          # Generate icon via Python
-          python3 - << 'PYEOF'
+      - name: Generate icon (with virtual display)
+        run: |
+          Xvfb :99 -screen 0 1024x768x24 &
+          sleep 2
+          DISPLAY=:99 python3 - << 'PYEOF'
           from PyQt6.QtWidgets import QApplication
           from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont
           from PyQt6.QtCore import Qt
-          import sys, os
-          os.environ.setdefault("DISPLAY", ":99")
+          import sys
           app = QApplication(sys.argv)
           pm = QPixmap(256, 256)
           pm.fill(QColor('#1a1a1a'))
@@ -88,12 +101,8 @@ jobs:
           p.end()
           pm.save('AppDir/AIDesktopLauncher.png')
           pm.save('AppDir/usr/share/icons/hicolor/256x256/apps/AIDesktopLauncher.png')
+          print("Icon created OK")
           PYEOF
-
-      - name: Install virtual display (for icon generation)
-        run: |
-          sudo apt-get install -y xvfb
-          Xvfb :99 -screen 0 1024x768x24 &
 
       - name: Package AppImage
         run: |
@@ -142,7 +151,7 @@ jobs:
           path: AIDesktopLauncher-*.exe
 
   # ─────────────────────────────────────────────
-  #  CREATE GITHUB RELEASE (only on tag push)
+  #  CREATE GITHUB RELEASE
   # ─────────────────────────────────────────────
   release:
     name: Create GitHub Release
@@ -163,17 +172,13 @@ jobs:
           body: |
             ## AI Desktop Launcher ${{ github.ref_name }}
 
-            Floating launcher for Gemini, Claude, ChatGPT, DeepSeek and Qwen — using Google Chrome in app mode.
+            Floating launcher for Gemini, Claude, ChatGPT, DeepSeek and Qwen.
 
             ### Downloads
             | Platform | File |
             |----------|------|
             | 🐧 Linux (x86_64) | `AIDesktopLauncher-${{ github.ref_name }}-x86_64.AppImage` |
-            | 🪟 Windows (x64) | `AIDesktopLauncher-${{ github.ref_name }}-windows.exe` |
-
-            ### Requirements
-            - Google Chrome installed on your system
-            - No Python or dependencies needed — just download and run!
+            | 🪟 Windows (x64)  | `AIDesktopLauncher-${{ github.ref_name }}-windows.exe` |
 
             ### Linux usage
             ```bash
