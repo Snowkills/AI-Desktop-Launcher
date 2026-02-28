@@ -1,0 +1,187 @@
+name: Build Releases
+
+on:
+  push:
+    tags:
+      - 'v*'          # triggers on tags like v1.0.0, v1.2.3 …
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+permissions:
+  contents: write   # needed to create GitHub Releases
+
+jobs:
+  # ─────────────────────────────────────────────
+  #  BUILD LINUX AppImage
+  # ─────────────────────────────────────────────
+  build-linux:
+    name: Build Linux AppImage
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller PyQt6
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --clean AIoverlay.spec
+
+      - name: Download appimagetool
+        run: |
+          curl -sSL -o appimagetool-x86_64.AppImage \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+      - name: Create AppDir structure
+        run: |
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+
+          cp dist/AIDesktopLauncher AppDir/usr/bin/AIDesktopLauncher
+          chmod +x AppDir/usr/bin/AIDesktopLauncher
+
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/AIDesktopLauncher" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          cat > AppDir/AIDesktopLauncher.desktop << 'EOF'
+          [Desktop Entry]
+          Name=AI Desktop Launcher
+          Comment=Floating launcher for top AI models
+          Exec=AIDesktopLauncher
+          Icon=AIDesktopLauncher
+          Type=Application
+          Terminal=false
+          Categories=Utility;Network;
+          StartupWMClass=AIDesktopLauncher
+          EOF
+          cp AppDir/AIDesktopLauncher.desktop AppDir/usr/share/applications/
+
+          # Generate icon via Python
+          python3 - << 'PYEOF'
+          from PyQt6.QtWidgets import QApplication
+          from PyQt6.QtGui import QPixmap, QPainter, QColor, QFont
+          from PyQt6.QtCore import Qt
+          import sys, os
+          os.environ.setdefault("DISPLAY", ":99")
+          app = QApplication(sys.argv)
+          pm = QPixmap(256, 256)
+          pm.fill(QColor('#1a1a1a'))
+          p = QPainter(pm)
+          p.setPen(QColor('#8ab4f8'))
+          f = QFont('Arial', 100, QFont.Weight.Bold)
+          p.setFont(f)
+          p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, 'AI')
+          p.end()
+          pm.save('AppDir/AIDesktopLauncher.png')
+          pm.save('AppDir/usr/share/icons/hicolor/256x256/apps/AIDesktopLauncher.png')
+          PYEOF
+
+      - name: Install virtual display (for icon generation)
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1024x768x24 &
+
+      - name: Package AppImage
+        run: |
+          ARCH=x86_64 ./appimagetool-x86_64.AppImage --no-appstream AppDir \
+            AIDesktopLauncher-${{ github.ref_name }}-x86_64.AppImage
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppImage-linux
+          path: AIDesktopLauncher-*.AppImage
+
+  # ─────────────────────────────────────────────
+  #  BUILD WINDOWS .exe
+  # ─────────────────────────────────────────────
+  build-windows:
+    name: Build Windows .exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller PyQt6
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --clean AIoverlay.spec
+
+      - name: Rename output
+        run: |
+          move dist\AIDesktopLauncher.exe AIDesktopLauncher-${{ github.ref_name }}-windows.exe
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-windows
+          path: AIDesktopLauncher-*.exe
+
+  # ─────────────────────────────────────────────
+  #  CREATE GITHUB RELEASE (only on tag push)
+  # ─────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create Release with assets
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AI Desktop Launcher ${{ github.ref_name }}"
+          body: |
+            ## AI Desktop Launcher ${{ github.ref_name }}
+
+            Floating launcher for Gemini, Claude, ChatGPT, DeepSeek and Qwen — using Google Chrome in app mode.
+
+            ### Downloads
+            | Platform | File |
+            |----------|------|
+            | 🐧 Linux (x86_64) | `AIDesktopLauncher-${{ github.ref_name }}-x86_64.AppImage` |
+            | 🪟 Windows (x64) | `AIDesktopLauncher-${{ github.ref_name }}-windows.exe` |
+
+            ### Requirements
+            - Google Chrome installed on your system
+            - No Python or dependencies needed — just download and run!
+
+            ### Linux usage
+            ```bash
+            chmod +x AIDesktopLauncher-*.AppImage
+            ./AIDesktopLauncher-*.AppImage
+            ```
+          files: |
+            AIDesktopLauncher-*.AppImage
+            AIDesktopLauncher-*.exe
+          draft: false
+          prerelease: false

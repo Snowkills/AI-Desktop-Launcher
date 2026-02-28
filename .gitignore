@@ -1,0 +1,18 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.ai-desktop-chrome/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec.bak
+
+# AppImage build artifacts
+AppDir/
+appimagetool-*.AppImage
+*.AppImage
+
+# Windows build
+*.exe
