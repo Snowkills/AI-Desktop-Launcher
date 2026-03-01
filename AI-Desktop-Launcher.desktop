@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=AI-Desktop-Launcher
+Comment=Minimal desktop launcher for AI models
+Exec=/path/to/your/downloaded/folder/run_AI-Desktop-Launcher.sh
+Icon=web-browser
+Type=Application
+Terminal=false
+Categories=Utility;Chat;
+StartupWMClass=AI-Desktop-Launcher
